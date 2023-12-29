@@ -1,6 +1,22 @@
 #=====2023-12-28,17点23 让cpu跑这个项目.
 做一个类似llama2的小模型.
 
+下载数据TinyStories到D:\data_llama
+
+1.py  进行token训练,生成tokenizer
+2.py  对数据进行tokenize 保存到数据路径上.
+3.py  训练然后模型保存到out里面, 我设置成了int8模式.这个最实用.速度快
+4.py  python调用刚才训练的模型,测试一下.
+5.py  windows模式下编译runq.c  如果没有exe自己编译一下.其他平台改改就行.
+6.py  把tokenizer.model(python调用这个格式) 转化成tokenizer.bin (c调用的格式)
+7.py  使用runq.c来运行语言模型.输出结果.
+
+
+
+
+
+
+
 
 
 

@@ -259,7 +259,7 @@ while True:
         param_group["lr"] = lr
 
     # evaluate the loss on train/val sets and write checkpoints
-    if iter_num % eval_interval == 0 and master_process:
+    if iter_num % eval_interval == 0 and master_process and iter_num:
         losses = estimate_loss()
         print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         if wandb_log:
@@ -289,10 +289,10 @@ while True:
                 }
                 print(f"saving checkpoint to {out_dir}")
                 torch.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
-                model_export(raw_model, os.path.join(out_dir, "model.bin"), version=0) #=========转化为我们要的模型. 把各个层的参数进行编码然后用python写入一个存文本文件里面即可.
+                model_export(raw_model, os.path.join(out_dir, "model.bin"), version=2) #=========转化为我们要的模型. 把各个层的参数进行编码然后用python写入一个存文本文件里面即可.
     if iter_num == 0 and eval_only:
         break
-
+#========训练
     # forward backward update, with optional gradient accumulation to simulate larger batch size
     # and using the GradScaler if data type is float16
     for micro_step in range(gradient_accumulation_steps):
@@ -310,6 +310,9 @@ while True:
         X, Y = next(train_batch_iter)
         # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
+        # running_loss = loss.item()#注意这里必须加item,否则爆显存.
+        # print(running_loss)
+
     # clip the gradient
     if grad_clip != 0.0:
         scaler.unscale_(optimizer)
@@ -324,7 +327,7 @@ while True:
     t1 = time.time()
     dt = t1 - t0
     t0 = t1
-    if iter_num % log_interval == 0 and master_process:
+    if iter_num % log_interval == 0 and master_process: #========打印loss
         # get loss as float, scale up due to the divide above. note: this is a CPU-GPU sync point
         lossf = loss.item() * gradient_accumulation_steps
         if local_iter_num >= 5:  # let the training loop settle a bit
@@ -339,6 +342,19 @@ while True:
     # termination conditions
     if iter_num > max_iters:
         break
+    if iter_num==1:#=========保存初始化的模型,用来测试是不是跑通流程.
+        checkpoint = {
+                    "model": raw_model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "model_args": model_args,
+                    "iter_num": iter_num,
+                    "best_val_loss": best_val_loss,
+                    "config": config,
+                }
+        print(f"saving checkpoint to {out_dir}")
+        torch.save(checkpoint, os.path.join(out_dir, "ckpt.pt"))
+        model_export(raw_model, os.path.join(out_dir, "model.bin"), version=2)
+        print('保存test模型,为了效率我们保存为int8模式.')
 
 if ddp:
     destroy_process_group()

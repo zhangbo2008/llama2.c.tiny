@@ -51,16 +51,16 @@ def quantize_q80(w, group_size):
     assert w.numel() % group_size == 0
     ori_shape = w.shape
     w = w.float() # convert to float32
-    w = w.reshape(-1, group_size)
+    w = w.reshape(-1, group_size) #=======切分成多少组, 每组group_size大小.
     # find the max in each group
-    wmax = torch.abs(w).max(dim=1).values
+    wmax = torch.abs(w).max(dim=1).values #每一组abs取一个最大值.
     # calculate the scaling factor such that float = quant * scale
     scale = wmax / 127.0
     # scale into range [-127, 127]
     quant = w / scale[:,None]
     # round to nearest integer
-    int8val = torch.round(quant).to(torch.int8)
-    # dequantize by rescaling
+    int8val = torch.round(quant).to(torch.int8) #量化后近似
+    # dequantize by rescaling=======下面计算误差!!!!!!!
     fp32val = (int8val.float() * scale[:,None]).view(-1)
     fp32valr = fp32val.reshape(-1, group_size)
     # calculate the max error in each group
@@ -179,9 +179,10 @@ def version1_export(model, filepath):
     out_file.close()
     print(f"wrote {filepath}")
 
+#=========这个是int8量化算法的实现. 很重要.
 def version2_export(model, filepath, group_size=64):
     """
-    Export the model weights in Q8_0 into .bin file to be read from C.
+    Export the model weights in Q8_0 into .bin file to be read from C. 转化权重到int8,存成bin文件给c用.
     That is:
     - quantize all weights to symmetric int8, in range [-127, 127]
     - all other tensors (the rmsnorm params) are kept and exported in fp32
@@ -190,7 +191,7 @@ def version2_export(model, filepath, group_size=64):
     version = 2
 
     # let's first do some validation for this export type
-    while model.params.dim % group_size != 0:
+    while model.params.dim % group_size != 0: # group_size这个参数用来设置多少个数据我们作为一组进行量化. 一直到整数倍才可以运行.
         group_size //= 2
         print(f"BACKOFF: reducing group size to {group_size} to fit hidden_dim")
     weights = [
@@ -231,7 +232,7 @@ def version2_export(model, filepath, group_size=64):
     out_file.write(b'\0' * pad)
     # now that the header is done, let's write out the model
 
-    # first let's write out all the params that we are keeping in fp32: the norms
+    # first let's write out all the params that we are keeping in fp32: the norms  #======norm和ffn_norm我们需要用32bit来记录.
     for layer in model.layers: # attention norms
         serialize_fp32(out_file, layer.attention_norm.weight)
     for layer in model.layers: # MLP norms
